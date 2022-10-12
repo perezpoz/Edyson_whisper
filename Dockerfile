@@ -15,4 +15,7 @@ RUN apt-get clean && apt-get update && apt-get -y install cmake ca-certificates 
 RUN pip3 install -r /app/requirements.txt
 RUN mkdir opensmile && cd opensmile && wget https://github.com/audeering/opensmile/releases/download/v3.0.0/opensmile-3.0-linux-x64.tar.gz && tar -xzvf opensmile-3.0-linux-x64.tar.gz && mv opensmile-3.0-linux-x64/* .
 
+# 300 seconds = 5 minutes
+RUN echo "uwsgi_read_timeout 1200s;" > /etc/nginx/conf.d/custom_timeout.conf
+
 WORKDIR /app/web

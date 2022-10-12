@@ -23,3 +23,5 @@ sklearn==0.0
 git+https://github.com/sevamoo/SOMPY.git
 umap-learn==0.3.8
 Werkzeug==0.15.2
+scikit-image
+librosa

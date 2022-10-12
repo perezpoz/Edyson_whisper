@@ -15,7 +15,7 @@ import json
 import re
 
 UPLOAD_FOLDER = 'static/uploads/'
-ALLOWED_EXTENSIONS = set(['wav', 'mp3'])
+ALLOWED_EXTENSIONS = set(['wav', 'mp3', 'm4a'])
 
 app = Flask(__name__)
 app.secret_key = 'hejhej00'

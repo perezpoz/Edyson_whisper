@@ -24,6 +24,14 @@ from scipy import signal
 import scipy.io.wavfile as wavfile
 from sklearn.decomposition import TruncatedSVD
 
+###
+import scipy.signal.windows as win
+import scipy.stats as stats
+###
+
+# Test for new features
+import librosa
+
 smilextract = os.path.join(os.path.dirname(__file__), '..', 'opensmile', 'bin', 'SMILExtract')
 config_dir = os.path.join(os.path.dirname(__file__), '..', 'opensmile', 'config', 'mfcc')
 static_dir = os.path.join(os.path.dirname(__file__), '..', 'web', 'static')
@@ -81,14 +89,22 @@ def main(session_key, config_file, segment_size, step_size):
     # Get full path
     audio_path = os.path.join(audio_dir, file_name)
 
-    # If mp3, convert to wav
+# If mp3, convert to wav
     if audio_path[-3:] == "mp3":
-        wav_audio = AudioSegment.from_mp3(audio_path)
+        #wav_audio = AudioSegment.from_mp3(audio_path)
+        wav_audio = AudioSegment.from_file(audio_path)
+        audio_path = audio_path[:-3:] + "wav" # set new audio_path
+        wav_audio.export(audio_path, format="wav")
+    
+    if audio_path[-3:] == "m4a":
+        #wav_audio = AudioSegment.from_mp3(audio_path)
+        wav_audio = AudioSegment.from_file(audio_path)
         audio_path = audio_path[:-3:] + "wav" # set new audio_path
         wav_audio.export(audio_path, format="wav")
     
     # Get metadata
-    loaded_sound = AudioSegment.from_wav(audio_path)
+    #loaded_sound = AudioSegment.from_wav(audio_path)
+    loaded_sound = AudioSegment.from_file(audio_path)
     audio_duration = len(loaded_sound)
     frame_rate = loaded_sound.frame_rate
 
@@ -123,6 +139,24 @@ def main(session_key, config_file, segment_size, step_size):
         svd = TruncatedSVD(n_components=39)
         result = svd.fit_transform(Sxx_transpose)
         print("scipy shape2: ", result.shape)
+
+    elif config_file == "multitaper":
+
+        # Read audio file and define parameters
+        audio_signal,sr = librosa.core.load(audio_path,mono=True, sr=None)
+        win_len = int(segment_size / 10)
+        step_len = (segment_size / 10)
+
+        # Multitaper spectrum and spectral slope
+        numK = 5 # Number of multitaper windows
+        freqlim = 500 # Threshold for high and low frequencies in slope estimation
+
+        multitaper_spect,_ = Multitaper(sig_audio = audio_signal, ln_window_ms = win_len, step_window_ms = step_len, sr = sr, numK = numK)
+
+        amplitude_lo, slopes_hi, slopes_lo = spectrum_slopes(spect_data = multitaper_spect, freqlim = freqlim, sr = sr, logscale = False)
+
+        result = np.concatenate((multitaper_spect,amplitude_lo.reshape((-1,1)), slopes_lo.reshape((-1,1)), slopes_hi.reshape((-1,1))), axis = 1)
+
     else:
         # Prepend path to config file
         config_file = os.path.join(config_dir, config_file)
@@ -149,9 +183,13 @@ def main(session_key, config_file, segment_size, step_size):
             temp_list = []
     result = np.array(new_result)
     
+    # Reduce dimensionality of data under 50 dimensions for TSNE stability
+    pca_reduc = PCA(n_components = 50)
+    reduc_result = pca_reduc.fit_transform(result)
+
     # Run data through t-SNE
     tsne = TSNE(n_components=2, perplexity=25)#, random_state=None)
-    Y1 = convert_range(tsne.fit_transform(result))
+    Y1 = convert_range(tsne.fit_transform(reduc_result))
     print("t-SNE done")
 
     # Run data through PCA
@@ -307,9 +345,12 @@ def retrain(valid_points, session_key, old_session_key, segment_size, step_size)
 
     new_result = np.array(new_result)
     
+    pca_reduc = PCA(n_components = 39)
+    new_reduc_result = pca_reduc.fit_transform(new_result)
+
     # Run data through t-SNE
     tsne = TSNE(n_components=2, perplexity=25)#, random_state=None)
-    Y1 = convert_range(tsne.fit_transform(new_result))
+    Y1 = convert_range(tsne.fit_transform(new_reduc_result))
     print("t-SNE done")
 
     # Run data through PCA

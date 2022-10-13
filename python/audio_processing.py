@@ -463,3 +463,77 @@ def convert_range(Y):
     new_Y_y = (((Y_y - min(Y_y)) * new_range) / old_range_y) + (-80)
     
     return np.array((new_Y_x, new_Y_y)).T
+
+def OA_windowing(signal, ln_window_ms, step_window_ms, sr, fn_window):
+    ln_window_samples = int(ln_window_ms * sr / 1000)
+    step_window_samples = int(step_window_ms * sr / 1000)
+
+    samples_channel = signal.shape[0] # This is the case downsampled to mono, keep in mind stereo case
+
+    total_windows = int(np.floor((samples_channel - ln_window_samples) / step_window_samples) + 1)
+
+    sig_windowed = np.zeros((total_windows,ln_window_samples))
+
+    idx_ini = 0
+    idx_end = ln_window_samples
+
+    pad_signal = np.concatenate((signal.reshape((1,-1)),np.zeros((1,ln_window_samples))),axis=1)
+
+    window = np.zeros((1,ln_window_samples))
+
+    if fn_window == "Rect":
+        window = np.ones((1,ln_window_samples))
+    elif fn_window == "Hann":
+        window = np.hanning(ln_window_samples).reshape((1,-1))
+
+    for i in range(total_windows):
+
+        sig_windowed[i,:] = np.multiply(pad_signal[:,idx_ini:idx_end].reshape((1,-1)),window)
+
+        idx_ini += step_window_samples
+        idx_end += step_window_samples
+
+    return sig_windowed
+
+def Multitaper(sig_audio, ln_window_ms, step_window_ms, sr, numK):
+    tapers = win.dpss(int(ln_window_ms * sr / 1000),NW = 3, Kmax = numK) # Use half bandwidth (NW) = 3 or 4
+
+    windowed_rect = OA_windowing(sig_audio,ln_window_ms, step_window_ms, sr, 'Rect')
+
+    windowed_dpss = np.zeros((windowed_rect.shape[0],int(windowed_rect.shape[1]/2 + 1),numK))
+
+    for k in range(numK):
+        windowed_dpss[:,:,1] = np.abs(np.fft.rfft(windowed_rect * tapers[k,:],axis=1))
+
+    multitaper_spect = np.mean(windowed_dpss,axis=2)
+
+    return multitaper_spect, windowed_dpss
+
+def spectrum_slopes(spect_data, freqlim, sr, logscale = False):
+    # Initialize parameters
+    numfreq = spect_data.shape[1] # Number of frequency bands
+    sample_lim = int(2 * freqlim * numfreq / sr) + 1 # index of frequency limit
+
+    if logscale:
+        spect_data = 20 * np.log10(np.abs(spect_data))
+
+    # Divide spectrum into high and low sections
+    spect_lo = spect_data[:,:sample_lim]
+    spect_hi = spect_data[:,sample_lim:]
+
+    # Calculate amplitude as difference between max and min amplitudes in low section
+    amplitude_lo = np.amax(spect_lo, axis = 1) - np.amin(spect_lo, axis = 1)
+
+    # Calculate regressive slopes
+    slopes_lo = np.zeros((spect_lo.shape[0],))
+    slopes_hi = np.zeros((spect_lo.shape[0],))
+    for frame in range(spect_lo.shape[0]):
+        slopes_lo[frame],_,_,_,_ = stats.linregress(np.arange(0,sample_lim),spect_lo[frame,:])
+        slopes_hi[frame],_,_,_,_ = stats.linregress(np.arange(sample_lim,numfreq),spect_hi[frame,:])
+
+    # Normalize slopes
+    amplitude_lo = amplitude_lo / np.max(np.abs(amplitude_lo))
+    slopes_lo = slopes_lo / np.max(np.abs(slopes_lo))
+    slopes_hi = slopes_hi / np.max(np.abs(slopes_hi))
+
+    return amplitude_lo, slopes_lo, slopes_hi

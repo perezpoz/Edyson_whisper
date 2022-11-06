@@ -27,10 +27,9 @@ from sklearn.decomposition import TruncatedSVD
 ###
 import scipy.signal.windows as win
 import scipy.stats as stats
+from librosa.feature import delta
+from rasta import rastaplp
 ###
-
-# Test for new features
-import librosa
 
 smilextract = os.path.join(os.path.dirname(__file__), '..', 'opensmile', 'bin', 'SMILExtract')
 config_dir = os.path.join(os.path.dirname(__file__), '..', 'opensmile', 'config', 'mfcc')
@@ -143,7 +142,7 @@ def main(session_key, config_file, segment_size, step_size):
     elif config_file == "multitaper":
 
         # Read audio file and define parameters
-        audio_signal,sr = librosa.core.load(audio_path,mono=True, sr=None)
+        sr, audio_signal = wavfile.read(audio_path)#librosa.core.load(audio_path,mono=True, sr=None)
         win_len = int(segment_size / 10)
         step_len = (segment_size / 10)
 
@@ -156,6 +155,35 @@ def main(session_key, config_file, segment_size, step_size):
         amplitude_lo, slopes_hi, slopes_lo = spectrum_slopes(spect_data = multitaper_spect, freqlim = freqlim, sr = sr, logscale = False)
 
         result = np.concatenate((multitaper_spect,amplitude_lo.reshape((-1,1)), slopes_lo.reshape((-1,1)), slopes_hi.reshape((-1,1))), axis = 1)
+    
+    elif config_file == "rastaplp":
+
+        # Read audio file and define parameters
+        sr, audio_signal = wavfile.read(audio_path)#librosa.core.load(audio_path,mono=True, sr=None)
+
+        if len(audio_signal.shape) == 2:
+            audio_signal = audio_signal[:,0]
+
+        if type(audio_signal[0]) == np.int16:
+            audio_signal = audio_signal.astype(np.float32) / 32768
+        elif type(audio_signal[0]) == np.int32:
+            audio_signal = audio_signal.astype(np.float32) / 2147483648
+
+        win_len = segment_size / 10
+        step_len = segment_size / 10
+        num_rasta = 19
+
+        # Extract RASTA features
+        rasta_sig = rastaplp(x = audio_signal, fs = sr, win_time = win_len/1000, hop_time = step_len/1000, dorasta = True, modelorder = num_rasta - 1)
+
+        rasta_delta = delta(rasta_sig)
+
+        rasta_delta_delta = delta(rasta_delta)
+
+        features = np.concatenate((rasta_sig, rasta_delta, rasta_delta_delta), axis = 0)
+
+
+        result = features.T
 
     else:
         # Prepend path to config file

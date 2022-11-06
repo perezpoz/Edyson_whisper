@@ -11,7 +11,7 @@ COPY ./uwsgi.ini /app/
 COPY ./python /app/python
 COPY ./web /app/web
 COPY ./requirements.txt /app/
-RUN apt-get clean && apt-get update && apt-get -y install cmake ca-certificates vim
+RUN apt-get clean && apt-get update && apt-get -y install cmake ca-certificates vim ffmpeg sox
 RUN pip3 install -r /app/requirements.txt
 RUN mkdir opensmile && cd opensmile && wget https://github.com/audeering/opensmile/releases/download/v3.0.0/opensmile-3.0-linux-x64.tar.gz && tar -xzvf opensmile-3.0-linux-x64.tar.gz && mv opensmile-3.0-linux-x64/* .
 
